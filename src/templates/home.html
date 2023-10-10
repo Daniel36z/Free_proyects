@@ -1,9 +1,0 @@
-{% extends './base.html' %}
-
-{% block title %}Home{% endblock %}
-
-{% block body %}
-<h1>AQUI PONDRIA MIS SWITCHES SI LOS TUVIERA, {{ current_user.fullname }}</h1>
-<img class="mb-4" src="{{ url_for('static', filename='img/situ.jpg') }}" alt="" width="300" height="240">
-<a class="btn btn-secondary" href="{{ url_for('logout') }}">Salir</a>
-{% endblock %}

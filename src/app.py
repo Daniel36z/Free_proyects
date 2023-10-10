@@ -1,117 +1,156 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
-from flask_mysqldb import MySQL
-from flask_wtf.csrf import CSRFProtect
-from flask_login import LoginManager, login_user, logout_user, login_required
-from config import config
-import json 
+from flask import Flask, request, redirect
 from ast import literal_eval
-# Models:
-from models.ModelUser import ModelUser
-
-# Entities:
-from models.entities.User import User
-
 import requests
-import formatos 
+import sqlite3 
+import json
+from werkzeug.security import generate_password_hash, check_password_hash
 
-
+urljuan = ("http://192.168.0.197:5000")
 app = Flask(__name__)
 
-csrf = CSRFProtect()#------------------------aqui csrf = CSRFProtect()
-db = MySQL(app)
-login_manager_app = LoginManager(app)
+@app.route('/usuario', methods=['POST'])
+def usuario0():
+    v3 = request.json["status"]
+    print(v3)
+    return(v3)
 
 
 
-@login_manager_app.user_loader
-def load_user(id):
-    return ModelUser.get_by_id(db, id)
-
-
-@app.route('/')
-def index():
-    return redirect(url_for('login'))
-
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        # print(request.form['username'])
-        # print(request.form['password'])
-        user = User(0, request.form['username'], request.form['password'])
-        logged_user = ModelUser.login(db, user)
-        if logged_user != None:
-            if logged_user.password:
-                login_user(logged_user)
-                return redirect(url_for('home'))
-            else:
-                flash("Clave equivocada...sospechoso")
-                return render_template('auth/login.html')
-        else:
-            flash("Usuario no encontrado :/")
-            return render_template('auth/login.html')
-    else:
-        return render_template('auth/login.html')
-
-
-@app.route('/logout')
-def logout():
-    logout_user()
-    return redirect(url_for('login'))
-
-
-@app.route('/home')
-def home():
+@app.route('/login', methods=['POST'])
+def clave():
     data = request.data
-    print(data)
-    return render_template('home.html')
+    objeto_json = literal_eval(data.decode('utf-8'))
+    user = objeto_json["usuario"]
+    pasoriginal = objeto_json["password"]
+    conexion = sqlite3.connect("basedbiot")
+    cursor = conexion.cursor()
+    cursor.execute(f"SELECT* FROM usuarios WHERE usuario = '{user}' ") 
+    v11 = cursor.fetchall()
+    if v11 == []:
+        estado_con=("no esta en la db")
+    elif v11[0][0] == user:
+        if check_password_hash(v11[0][2],pasoriginal) == True:
+            estado_con = redirect("https://www.facebook.com/")
+        else:
+            estado_con=("contraseña erronea")
+    conexion.close()
+    return(estado_con)
 
 
 
-@app.route('/protected')
-@login_required
-def protected():
-    return "<h1>Esta es una vista protegida, solo para usuarios autenticados.</h1>"
+@app.route('/create', methods=['POST'])
+def crear():
+    data = request.data
+    objeto_json = literal_eval(data.decode('utf-8'))
+    user = objeto_json["usuario"]
+    name = objeto_json["nombre"]
+    pasoriginal = objeto_json["password"]
+    pasencript= generate_password_hash(pasoriginal)
+    conexion = sqlite3.connect("basedbiot")
+    cursor = conexion.cursor()
+    cursor.execute(f"INSERT INTO usuarios(usuario,nombre,password) VALUES('{user}','{name}','{pasencript}')" )
+    conexion.commit()
+    conexion.close()
+    return("datos insertados con exito")
 
 
-def status_401(error):
-    return redirect(url_for('login'))
 
 
-'''
-formatos.door('1','True')
-formatos.light('1','True')
-formatos.light('2','False')
-formatos.light('3','False')
-formatos.buzz('1','False')'''
+@app.route('/delete',methods=['POST'])
+def borrar():
+    conexion = sqlite3.connect("basedbiot")
+    cursor = conexion.cursor()
+    data = request.data
+    objeto_json = literal_eval(data.decode('utf-8'))
+    user = objeto_json["usuario"]
+    cursor.execute(f"SELECT* FROM usuarios WHERE usuario = '{user}' ") 
+    v11 = cursor.fetchall()
+    if v11 == []:
+        estadoc=("no esta en la db")
+        pasencript="malo"
+    else:
+        pasencript = v11[0][2]
+    pasoriginal = objeto_json["password"]
+    pasencript2= check_password_hash(pasencript,pasoriginal)# esto es True
+    if pasencript2 == True:
+        estadoc = "datos ok"
+        borrado = f"""
+            DELETE FROM usuarios WHERE usuario = '{user}' AND password = '{pasencript}'
+            """
+        cursor.execute(borrado)
+        conexion.commit()
+    else:
+        estadoc = "credenciales no coinciden"
 
+    conexion.close()
+    return(estadoc)
+    
+
+@app.route('/update', methods = ['POST'])
+def actualizar():
+    data = request.data
+    objeto_json = literal_eval(data.decode('utf-8'))
+    user = objeto_json["usuario"]
+    name = objeto_json["nombre"]
+    pas = objeto_json["password"]
+    newuser = objeto_json["newusuario"]
+    newpas = objeto_json["newpassword"]
+    newname = objeto_json["newname"]
+
+    conexion = sqlite3.connect("basedbiot")
+    cursor = conexion.cursor()
+    cursor.execute(f"SELECT* FROM usuarios WHERE usuario = '{user}' ") 
+    v11 = cursor.fetchall()
+    if v11 == []:
+        estadoc=("no esta en la db")
+        pasencript="malo"
+    else:
+        pasencript = v11[0][2]
+    pasencript2= check_password_hash(pasencript,pas)# esto es True
+    newpasencr = generate_password_hash(newpas)
+    
+    if pasencript2 == True:
+        estadoc = "datos ok"
+        actualizado = f"UPDATE usuarios SET usuario='{newuser}' WHERE usuario = '{user}' " 
+        actualizado2 = f"UPDATE usuarios SET nombre='{newname}' WHERE nombre = '{name}' " 
+        actualizado3 = f"UPDATE usuarios SET password='{newpasencr}' WHERE password = '{pas}' " 
+        cursor.execute(actualizado)
+        cursor.execute(actualizado2)
+        cursor.execute(actualizado3)
+        conexion.commit()
+    else:
+        estadoc = "credenciales no coinciden"
+    return(estadoc)
+
+
+
+
+
+def entrega(urljuan,v1,v2):
+    entrega= {"id":v1,"status":v2}
+    headers = {"Content-Type": "application/json; charset=utf-8"}
+    requests.post(urljuan,  data = json.dumps(entrega),headers= headers)
 
 
 @app.route('/cambio', methods=['POST'])
 def llegada():
     data = request.data
     objeto_json = literal_eval(data.decode('utf-8'))
-    print("su bombillo es el:", objeto_json['id'], "y su estado es:", objeto_json['status'])
-    return(objeto_json)
+    v1 = objeto_json["id"]
+    v2 = objeto_json["status"]
+    if (objeto_json['id'] == '1'):
+        entrega(urljuan+"/light/1",v1,v2)
+    elif(objeto_json['id'] == '2'):
+        entrega(urljuan+"/light/2",v1,v2)
+    elif(objeto_json['id'] == '3'):
+        entrega(urljuan+"/light/3",v1,v2)
+    elif(objeto_json['id'] == '4'):
+        entrega(urljuan+"/door/1",v1,v2)
+    elif(objeto_json['id'] == '5'):
+        requests.post(urljuan,"qui va la alarma") 
+    return("ok")
 
-
-
-
-
-
-
-
-
+    
 if __name__ == '__main__':
-    app.config.from_object(config['development'])
-    csrf.init_app(app)
-    app.register_error_handler(401, status_401)
-
-    app.run(host="0.0.0.0")
-
-
-
-
-
-
+    app.run(host='0.0.0.0', debug=True)
     
